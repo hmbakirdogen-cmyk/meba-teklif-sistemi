@@ -1,9 +1,9 @@
 /**
  * DIŞ RAPOR KAPISI — salt-okuma teklif erişimi
  * ─────────────────────────────────────────────────────────────────
- * NE: Teklif Sistemi'nin dışındaki programların (ilk kullanıcı: MEBA Satış
- *     CRM / "SEYES") geçmiş teklifleri ve onay sonuçlarını okuyabilmesi için
- *     iki adet GET uç noktası.
+ * NE: Teklif Sistemi'nin dışındaki programların (ilk kullanıcı: MEBA Sales,
+ *     saha satış programı) geçmiş teklifleri ve onay sonuçlarını okuyabilmesi
+ *     için üç adet GET uç noktası.
  *
  * NEDEN: Mehmet abi teklif sonuçlarını telefondan takip etmek istiyor. Mevcut
  *     `GET /api/teklifler` bu iş için kullanılamaz — orada alan seçimi yok,
@@ -106,6 +106,20 @@ const DIS_ALANLAR = {
   cariSnapshot: true,
 } as const;
 
+/** Tekil teklif detayında ek olarak dönen alanlar.
+ *  Listede DÖNMEZ: 271 teklifin kalemleriyle birlikte taşınması hem ağır olur
+ *  hem de gereksiz — kalemler yalnızca kullanıcı o teklifi AÇTIĞINDA gider. */
+const DIS_DETAY_ALANLAR = {
+  ...DIS_ALANLAR,
+  satirlar: true,
+  araToplam: true,
+  toplamIndirim: true,
+  toplamVergi: true,
+  kdvOrani: true,
+  odemeVadesi: true,
+  gecerlilikSuresi: true,
+} as const;
+
 // ─────────────────────────────────────────────────────────────────
 // KİMLİK — Bearer anahtarı
 // ─────────────────────────────────────────────────────────────────
@@ -165,13 +179,66 @@ function cariAdiCikar(snapshot: unknown): string | null {
   return typeof ad === 'string' && ad.trim() ? ad : null;
 }
 
+/** cariSnapshot'tan carinin KALICI kimliğini çıkarır.
+ *
+ *  NEDEN: Alıcı program teklifleri firmaya göre gruplayacak. İsimle gruplamak
+ *  ölçüldü ve GÜVENİLMEZ çıktı: aynı firma "MONDİ YATAK YORGAN SAN.TİC. A.Ş."
+ *  ve kısa adıyla ayrı ayrı yazılabiliyor, 271 teklifin yalnızca 53'ü hedef
+ *  programdaki adla birebir tutuyordu. Kalıcı kimlikle gruplama tahmine yer
+ *  bırakmaz. Teklif tablosunda cariye giden bir yabancı anahtar YOK; kimlik
+ *  yalnızca snapshot'ın içinde duruyor.
+ */
+function cariMetin(snapshot: unknown, alan: string): string | null {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+  const v = (snapshot as Record<string, unknown>)[alan];
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
+}
+
 /** Prisma satırını dışarı verilecek biçime çevirir — cariSnapshot burada düşer. */
 function disTeklif(t: Record<string, unknown>) {
   const { cariSnapshot, ...kalan } = t;
   return {
     ...kalan,
     cariAdi: cariAdiCikar(cariSnapshot),
+    cariId: cariMetin(cariSnapshot, 'id'),
+    cariKod: cariMetin(cariSnapshot, 'cariKod'),
   };
+}
+
+/** Teklif kalemlerinin dışarı çıkan biçimi — ALAN ALAN seçilir.
+ *
+ *  NEDEN alan alan: `satirlar` veritabanında serbest JSON. Ham hâlini geçirmek,
+ *  bugün bilmediğimiz (ya da yarın eklenecek) bir alanın da telefona gitmesi
+ *  demek olurdu. Beyaz liste, teklifin kendisinde zaten müşteriye giden
+ *  bilgiyle sınırlı.
+ *
+ *  `onayDurumu` bilinçli olarak VAR: kısmi onaylarda hangi kalemin kabul
+ *  edildiği sahadaki en değerli bilgi — Mehmet abi'nin takip etmek istediği şey.
+ */
+function disSatir(s: unknown) {
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+  const r = s as Record<string, unknown>;
+  const metin = (a: string) => (typeof r[a] === 'string' ? (r[a] as string) : null);
+  const sayi = (a: string) => (typeof r[a] === 'number' && Number.isFinite(r[a]) ? (r[a] as number) : null);
+  return {
+    marka: metin('marka'),
+    urunKod: metin('urunKod'),
+    urunAdi: metin('urunAdi'),
+    aciklama: metin('aciklama'),
+    miktar: sayi('miktar'),
+    birim: metin('birim'),
+    birimFiyat: sayi('birimFiyat'),
+    indirimOrani: sayi('indirimOrani'),
+    satirToplami: sayi('satirToplami'),
+    paraBirimi: metin('paraBirimi'),
+    altKalem: r.setAltKalem === true,
+    onayDurumu: metin('onayDurumu'),
+  };
+}
+
+function disSatirlar(ham: unknown) {
+  if (!Array.isArray(ham)) return [];
+  return ham.map(disSatir).filter((s): s is NonNullable<typeof s> => s !== null);
 }
 
 /** Tekil sorgu değerini güvenli metne indirger (Express 5 çok-değer uyumlu). */
@@ -353,6 +420,35 @@ raporRouter.get(
       durumlar: durumlar.sort((a, b) => b.adet - a.adet),
       gruplar,
       hesaplamaZamani: new Date().toISOString(),
+    });
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────────
+// GET /api/dis/teklif/:id — tek teklifin detayı (kalemler dahil)
+// ─────────────────────────────────────────────────────────────────
+raporRouter.get(
+  '/teklif/:id',
+  raporAnahtariGerekli,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id ?? '').trim();
+    if (!id) throw new HttpError(400, 'Teklif kimligi gerekli.');
+
+    const t = await prisma.teklif.findFirst({
+      where: { id, deletedAt: null },
+      select: DIS_DETAY_ALANLAR,
+    });
+    if (!t) throw new HttpError(404, 'Teklif bulunamadi.');
+
+    const ham = t as unknown as Record<string, unknown>;
+    const { satirlar: hamSatirlar, ...kalan } = ham;
+
+    res.json({
+      teklif: {
+        ...disTeklif(kalan),
+        satirlar: disSatirlar(hamSatirlar),
+      },
+      cekilmeZamani: new Date().toISOString(),
     });
   }),
 );
