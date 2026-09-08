@@ -348,6 +348,68 @@ raporRouter.get(
 );
 
 // ─────────────────────────────────────────────────────────────────
+// GET /api/dis/cariler — sayfalı, beyaz listeli CARİ (firma) listesi
+//
+// NEDEN VAR: MEBA Sales'te müşteri ile buradaki firma elle eşleştiriliyor.
+//   Eşleştirme listesi bugüne kadar YALNIZ tekliflerden türetiliyordu, yani
+//   "teklif verilmiş firmalar" listesiydi. Mehmet abi sahada bunu gördü:
+//   "tüm firmaları göremiyorum ki ben orda, mesela HİS TEKSTİL" — o firmanın
+//   burada carisi var ama henüz teklifi yok, bu yüzden listede hiç çıkmıyordu.
+//   Bu uç nokta cari listesinin kendisini veriyor; eşleştirme artık teklifi
+//   olmayan firmayı da bulabiliyor.
+//
+// KIRMIZI ÇİZGİLER (dosyanın başındakiler burada da geçerli):
+//   · Yalnız okuma. · Beyaz liste: yalnız id, cariKod, firmaAdi, sehir.
+//   · Telefon, e-posta, adres, vergi no, notlar, kişiler DIŞARI ÇIKMAZ —
+//     eşleştirme için gereken tek şey kimlik ve ad; gerisi kişisel veridir.
+//   · Silinmiş cari (deletedAt) dönmez.
+// ─────────────────────────────────────────────────────────────────
+raporRouter.get(
+  '/cariler',
+  raporAnahtariGerekli,
+  asyncHandler(async (req, res) => {
+    const where: Record<string, unknown> = { deletedAt: null };
+
+    const firmaId = sorguStr(req, 'firmaId');
+    if (firmaId) {
+      if (firmaId.length > 40) throw new HttpError(400, 'firmaId cok uzun.');
+      where.firmaId = firmaId;
+    }
+
+    const sonrasi = tarihSuzgeci(sorguStr(req, 'guncellemeSonrasi'));
+    if (sonrasi) where.guncellemeTarihi = { gte: sonrasi };
+
+    const hamLimit = Number.parseInt(sorguStr(req, 'limit'), 10);
+    const limit =
+      Number.isFinite(hamLimit) && hamLimit > 0
+        ? Math.min(hamLimit, TAVAN_LIMIT)
+        : VARSAYILAN_LIMIT;
+
+    const imlec = sorguStr(req, 'imlec');
+
+    const satirlar = await prisma.cari.findMany({
+      where,
+      // Beyaz liste: eşleştirme için gereken en az bilgi.
+      select: { id: true, cariKod: true, firmaAdi: true, sehir: true, guncellemeTarihi: true },
+      orderBy: [{ guncellemeTarihi: 'asc' }, { id: 'asc' }],
+      take: limit,
+      ...(imlec ? { cursor: { id: imlec }, skip: 1 } : {}),
+    });
+
+    const sonrakiImlec =
+      satirlar.length === limit ? satirlar[satirlar.length - 1]?.id ?? null : null;
+
+    res.json({
+      cariler: satirlar,
+      adet: satirlar.length,
+      limit,
+      sonrakiImlec,
+      cekilmeZamani: new Date().toISOString(),
+    });
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────────
 // GET /api/dis/teklif-ozet — durum bazlı adet + tutar
 // ─────────────────────────────────────────────────────────────────
 raporRouter.get(
