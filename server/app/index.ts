@@ -25,6 +25,7 @@ import { initRouter } from '../routes/init.routes.js';
 import { emailRouter } from '../routes/email.routes.js';
 import { storageRouter } from '../routes/storage.routes.js';
 import { kurRouter } from '../routes/kur.routes.js';
+import { raporRouter } from '../routes/rapor.routes.js';
 import { mountStaticServe } from './staticServe.js';
 
 const app = express();
@@ -81,6 +82,7 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── API routes ─────────────────────────────────────────────────
+app.use('/api/dis', raporRouter); // salt-okuma dis rapor kapisi (kendi Bearer anahtari; requireAuth zincirine girmez)
 app.use('/api/auth', authRouter);
 app.use('/api', firmalarRouter); // firmalar/firma/firma/:id/personel/firma/:id/logo
 app.use('/api/kullanicilar', kullanicilarRouter);
