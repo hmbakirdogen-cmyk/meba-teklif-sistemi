@@ -264,6 +264,14 @@ export const api = {
   init: (kullanici?: { id: string; rol: string }) =>
     get<InitData>(`/init${userQuery(kullanici)}`),
 
+  // NE: Yalnız cari listesi — /api/init ile aynı kapsam ve sıra.
+  // NEDEN: Liste sayfaları carileri tazelemek için tam açılış verisini (46 bin ürün dahil) çekiyordu;
+  //        sunucu 512 MB sınırında bu yüzden defalarca bellek taşmasıyla kapandı.
+  // NASIL: GET /api/init/cariler → { cariler }.
+  // YAN ETKİ: Ağ trafiği ve bekleme süresi belirgin azalır; gelen cariler aynıdır.
+  initCariler: (kullanici?: { id: string; rol: string }) =>
+    get<Pick<InitData, 'cariler'>>(`/init/cariler${userQuery(kullanici)}`),
+
   teklifler: {
     /** Re-fetch teklifler list with visibility filter (used when user changes
      *  or list page wants fresh data). */

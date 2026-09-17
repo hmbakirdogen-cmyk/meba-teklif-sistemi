@@ -22,25 +22,41 @@
  */
 
 import type { Request, Response, NextFunction } from 'express';
+import { r2AdresleriniDuzelt } from '../lib/jsonAkis.js';
 
-const R2_DEV_HOST_RE = /https?:\/\/pub-[a-f0-9]+\.r2\.dev/gi;
+const R2_DEV_HOST_TEST = /https?:\/\/pub-[a-f0-9]+\.r2\.dev/i;
 
+/*
+  NE: res.json'u, gövdeyi yalnız BİR kez JSON'a çevirecek şekilde sarar (r2.dev düzeltmesi dahil).
+  NEDEN: Eski hâli r2.dev bulunmayan her cevapta gövdeyi iki kez JSON'a çeviriyordu (önce test için,
+         sonra Express'in kendi res.json'u); büyük cevaplarda bu çift kopya 512 MB'lık sunucunun
+         bellek taşmasına katkı veriyordu.
+  NASIL: Tek JSON.stringify → r2.dev varsa düzeltilir ve içerik türü eskisi gibi zorla yazılır; yoksa
+         Express'in yaptığı gibi içerik türü yalnız boşsa atanır → res.send. Serileştirme hatası,
+         tanımsız gövde veya uygulamada özel JSON ayarı varsa eski yola (Express res.json) düşülür.
+  YAN ETKİ: Gönderilen baytlar ve başlıklar eskisiyle aynıdır; yalnız bellek ve işlemci kullanımı azalır.
+*/
 export function rewriteR2UrlsMiddleware(_req: Request, res: Response, next: NextFunction) {
   const originalJson = res.json.bind(res);
   res.json = function (data: unknown) {
+    const app = res.app;
+    if (app && (app.get('json replacer') || app.get('json spaces') || app.get('json escape'))) {
+      return originalJson(data);
+    }
+    let json: string | undefined;
     try {
-      const json = JSON.stringify(data);
-      if (R2_DEV_HOST_RE.test(json)) {
-        // Regex stateful — test sonrası reset
-        R2_DEV_HOST_RE.lastIndex = 0;
-        const rewritten = json.replace(R2_DEV_HOST_RE, '/api/storage');
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        return res.send(rewritten);
-      }
+      json = JSON.stringify(data);
     } catch {
       // serialize fail → orijinal davranış
+      return originalJson(data);
     }
-    return originalJson(data);
+    if (json === undefined) return originalJson(data);
+    if (R2_DEV_HOST_TEST.test(json)) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.send(r2AdresleriniDuzelt(json));
+    }
+    if (!res.get('Content-Type')) res.set('Content-Type', 'application/json');
+    return res.send(json);
   };
   next();
 }

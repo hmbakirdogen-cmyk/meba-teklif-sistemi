@@ -246,10 +246,12 @@ export const dataStore = {
     store.teklifler = liste;
   },
 
-  /** Re-fetch cariler — full snapshot via /api/init (visibility-filter-free).
-   *  TeklifListesi açılışında kart logosu/snapshot tazeliği için kullanılır. */
+  /** Re-fetch cariler — /api/init ile aynı kapsamdaki tam cari listesi (visibility-filter-free).
+   *  TeklifListesi açılışında kart logosu/snapshot tazeliği için kullanılır.
+   *  NE/NEDEN: Eskiden tam açılış verisini (tüm teklif + 46 bin ürün) çekiyordu → sunucu bellek
+   *  taşması. NASIL: yalnız /api/init/cariler. YAN ETKİ: aynı cariler, çok daha hafif istek. */
   async refreshCariler(kullanici?: { id: string; rol: string }): Promise<void> {
-    const data = await api.init(kullanici);
+    const data = await api.initCariler(kullanici);
     store.cariler = data.cariler;
   },
   cacheUpsertTeklif(t: Teklif): void {
