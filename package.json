@@ -10,7 +10,7 @@
     "dev": "concurrently -k -n API,WEB -c cyan,green \"npm run dev:server\" \"vite\"",
     "dev:server": "tsx watch server/app/index.ts",
     "build": "tsc -b && vite build",
-    "start:prod": "prisma migrate resolve --rolled-back 20260526120000_add_unvan_cinsiyet || true && prisma migrate deploy && tsx server/app/index.ts",
+    "start:prod": "prisma migrate resolve --rolled-back 20260526120000_add_unvan_cinsiyet || true && prisma migrate deploy && exec node --import tsx server/app/index.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
