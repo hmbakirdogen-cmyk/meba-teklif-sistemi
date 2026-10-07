@@ -42,6 +42,9 @@ export interface CrudOptions {
 }
 
 export function makeCrud(modelKey: ModelKey, _opts: CrudOptions = {}) {
+  /* NE: Ayrılmış seçenek parametresini açıkça tüket. NEDEN: Lint hatası.
+     NASIL: void. YAN ETKİ: CRUD davranışı ve imzası aynı kalır. */
+  void _opts;
   const model = prisma[modelKey] as unknown as {
     findMany: (args: unknown) => Promise<unknown[]>;
     findUnique: (args: unknown) => Promise<{ version?: number; firmaId?: string } | null>;

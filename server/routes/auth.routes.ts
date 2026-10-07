@@ -4,7 +4,9 @@ import { prisma } from '../lib/prisma.js';
 import { hashPassword, verifyPassword, isVarsayilanSifre } from '../lib/auth.js';
 import { olusturOturum, oturumKapat, kullaniciOturumlariniIptalEt } from '../lib/sessions.js';
 import { canAccessFirma, isYonetici } from '../lib/firmaScope.js';
-import { sanitizeUser, sanitizeFirma, uretInitials } from '../lib/sanitize.js';
+/* NE: Kullanılmayan importu kaldır. NEDEN: Lint hatası.
+   NASIL: Yalnız import listesini daralt. YAN ETKİ: Kimlik doğrulama değişmez. */
+import { sanitizeUser, sanitizeFirma } from '../lib/sanitize.js';
 import { uploadFile, decodeDataUrl, mimeToExt, MAX_PHOTO_BYTES } from '../lib/storage.js';
 import { encryptPassword, verifySMTP, sendViaSMTP, SMTP_PRESETS } from '../lib/smtp.js';
 import { audit, auditPrune } from '../lib/audit.js';
@@ -312,13 +314,19 @@ authRouter.post(
       },
     });
 
-    await audit('admin_profil_foto_yuklendi', {
-      kullaniciId: target.id,
-      kullaniciAdi: target.kullaniciAdi,
-      firmaId: target.firmaId,
-      yapanKullaniciId: requestor.id,
-      yapanKullaniciAdi: requestor.kullaniciAdi,
-    });
+    // NE: admin_profil_foto_yuklendi audit kaydı — alan adları AuditCtx şemasına uygun hâle getirildi.
+    // NEDEN: AuditCtx { kullaniciId, kullaniciAdi, firmaId } — "yapan/hedef" ayrımı YOK. Projede sabit
+    //        kural: ana alanlar İŞLEMİ YAPANI tutar, hedef daima detay'a yazılır (krş. kullanici_guncellendi
+    //        / sifre_sifirlandi: kullaniciId=me, detay.hedefId). Eski hâli tersti — hedefi ana alana, yapanı
+    //        var olmayan yapanKullaniciId/yapanKullaniciAdi alanlarına koyuyordu → TS2561 + audit log'un
+    //        kullaniciId sütunu bu tek olayda diğerleriyle tutarsız olurdu.
+    // NASIL: kullaniciId/kullaniciAdi/firmaId = requestor (yapan admin); hedef kullanıcı detay'a taşındı.
+    // YAN ETKİ: bu olayın satırında artık YAPAN kayıtlı (audit tutarlı); hedef bilgisi detay'da korunuyor.
+    await audit(
+      'admin_profil_foto_yuklendi',
+      { kullaniciId: requestor.id, kullaniciAdi: requestor.kullaniciAdi, firmaId: requestor.firmaId },
+      { hedefId: target.id, hedefKullaniciAdi: target.kullaniciAdi },
+    );
     res.json({ profilFotoUrl: cacheBust, kullanici: sanitizeUser(updated) });
   }),
 );

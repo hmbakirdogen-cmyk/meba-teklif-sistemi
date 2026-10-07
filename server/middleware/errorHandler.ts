@@ -17,6 +17,9 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  /* NE: next parametresini koru. NEDEN: Express hata işleyicisini dört argümanla tanır.
+     NASIL: void ile kullanılmadığını belirt. YAN ETKİ: Hata akışı değişmez. */
+  void _next;
   if (res.headersSent) return;
   if (err instanceof HttpError) {
     res.status(err.status).json({ error: err.message, details: err.details ?? undefined });

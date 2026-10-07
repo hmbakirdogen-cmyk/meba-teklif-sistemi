@@ -75,7 +75,9 @@ urunlerRouter.get('/search', requireAuth, asyncHandler(async (req, res) => {
       LIMIT ${limit};
     `);
 
-    res.json(rows.map(({ skor: _skor, ...urun }) => urun));
+    /* NE: Arama skorunun dışarı gönderilmediğini açıkça belirt. NEDEN: Lint hatası.
+       NASIL: Skoru void ile tüket. YAN ETKİ: Yanıt alanları değişmez. */
+    res.json(rows.map(({ skor, ...urun }) => { void skor; return urun; }));
   } catch (error) {
     throw new HttpError(500, 'Urun arama sorgusu calistirilamadi.', error);
   }

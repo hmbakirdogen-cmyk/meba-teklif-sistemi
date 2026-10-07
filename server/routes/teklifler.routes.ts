@@ -1,4 +1,7 @@
 import { Router } from 'express';
+/* NE: Prisma kayıt tipini kullan. NEDEN: any yerine açık tip.
+   NASIL: Yalnız tip importu. YAN ETKİ: Çalışma zamanı değişmez. */
+import type { Prisma } from '@prisma/client';
 import { paramStr } from '../lib/params.js';
 import { prisma } from '../lib/prisma.js';
 import { canAccessFirma, isYonetici } from '../lib/firmaScope.js';
@@ -121,11 +124,13 @@ tekliflerRouter.put(
     } else {
       try {
         final = await prisma.teklif.create({
-          data: { id, ...(data as Record<string, unknown>), ...sync, deletedAt: null } as any,
+          data: { id, ...(data as Record<string, unknown>), ...sync, deletedAt: null } as Prisma.TeklifUncheckedCreateInput,
         });
-      } catch (err: any) {
+      /* NE: Bilinmeyen hatanın kodunu güvenli daralt. NEDEN: any lint hatası.
+         NASIL: Nesne ve code alanını kontrol et. YAN ETKİ: P2002 yeniden deneme korunur. */
+      } catch (err: unknown) {
         // P2002 = unique constraint — baska istek bizden once create etti
-        if (err?.code === 'P2002') {
+        if (typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2002') {
           final = await prisma.teklif.update({ where: { id }, data: { ...data, ...sync } });
         } else {
           throw err;

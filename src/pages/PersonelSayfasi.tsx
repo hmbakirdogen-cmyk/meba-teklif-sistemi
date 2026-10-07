@@ -439,11 +439,11 @@ export default function PersonelSayfasi() {
           </Form.Item>
           <Form.Item
             name="unvan"
-            label="Ünvan"
+            label="Meslek / Ünvan"
             extra="Örn: Makine Mühendisi, Satış Sorumlusu, Pazarlama Uzmanı"
             normalize={(val: string) => formatUnvan(val ?? '', true)}
           >
-            <Input placeholder="Ünvan" autoComplete="off" />
+            <Input placeholder="Örn. Makine Mühendisi" autoComplete="off" />
           </Form.Item>
           <Form.Item name="telefon" label="Telefon">
             <Input placeholder="0XXX XXX XX XX" autoComplete="off" />
@@ -451,8 +451,12 @@ export default function PersonelSayfasi() {
           <Form.Item name="dahili" label="Dahili">
             <Input placeholder="Dahili numara" autoComplete="off" />
           </Form.Item>
-          <Form.Item name="rol" label="Rol" rules={[{ required: true }]}>
-            <Select>
+          {/* NE: Meslek ile sistem rolünü ayır ve seçim listelerini pencere içinde aç.
+              NEDEN: Dışarı açılan liste modal katmanının altında kalıp seçimi engelleyebilir.
+              NASIL: Popup'ı alanın ebeveynine bağla; firma adlarıyla aramayı aç.
+              YAN ETKİ: Yetkiler ve kayıt verisi değişmez, yalnızca alan sunumu değişir. */}
+          <Form.Item name="rol" label="Sistemdeki Görevi" extra="Mesleği yukarıya yazın; burada sistemdeki görevini seçin." rules={[{ required: true }]}>
+            <Select getPopupContainer={(t) => t.parentElement ?? document.body}>
               <Select.Option value="engineer">Mühendis</Select.Option>
               <Select.Option value="sales">Satış Sorumlusu</Select.Option>
               {isAdmin && (
@@ -496,7 +500,12 @@ export default function PersonelSayfasi() {
               {() => {
                 return (
                   <Form.Item name="firmaId" label="Firma" rules={[{ required: true, message: 'Firma seçiniz' }]}>
-                    <Select placeholder="Firma seçin">
+                    <Select
+                      placeholder="Firma seçin"
+                      showSearch
+                      optionFilterProp="children"
+                      getPopupContainer={(t) => t.parentElement ?? document.body}
+                    >
                       {firmalar.map((f) => (
                         <Select.Option key={f.id} value={f.id}>{f.ad}</Select.Option>
                       ))}

@@ -59,7 +59,9 @@ kullanicilarRouter.post(
       throw new HttpError(400, 'Ad Soyad ve kullanici adi zorunlu.');
     }
 
-    let firmaId: string | null = body.firmaId || null;
+    /* NE: Firma kimliğini const yap. NEDEN: Yeniden atanmaz.
+       NASIL: Bildirim türünü değiştir. YAN ETKİ: Firma doğrulaması değişmez. */
+    const firmaId: string | null = body.firmaId || null;
     if (firmaId !== null && !firmaId) throw new HttpError(400, 'firmaId zorunlu.');
     if (firmaId !== null) {
       const f = await prisma.firma.findUnique({ where: { id: firmaId } });
